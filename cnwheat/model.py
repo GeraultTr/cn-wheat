@@ -805,12 +805,12 @@ class Roots(Organ):
         self.Unloading_Amino_Acids = None  #: current Unloading of amino acids from phloem to roots
 
         # other fluxes
-        self.Export_Nitrates = None  #: Total export of nitrates from roots to shoot organs integrated over a delta t (µmol` N)
-        self.Export_Amino_Acids = None  #: Total export of amino acids from roots to shoot organs integrated over a delta t (µmol` N)
+        self.Export_Nitrates = 0  #: Total export of nitrates from roots to shoot organs integrated over a delta t (µmol` N)
+        self.Export_Amino_Acids = 0  #: Total export of amino acids from roots to shoot organs integrated over a delta t (µmol` N)
         self.S_Amino_Acids = None  #: Rate of amino acid synthesis in roots integrated over a delta t (µmol` N g-1 mstruct)
         self.Uptake_Nitrates = None  #: Rate of nitrate uptake by roots integrated over a delta t (µmol` N nitrates)
         self.S_cytokinins = None  #: Rate of cytokinin synthesis integrated over a delta t (AU g-1 mstruct)
-        self.Export_cytokinins = None  #: Total export of cytokinin from roots to shoot organs integrated over a delta t (AU)
+        self.Export_cytokinins = 0  #: Total export of cytokinin from roots to shoot organs integrated over a delta t (AU)
 
         # Integrated variables
         self.Total_Organic_Nitrogen = None  #: current amount of organic N (µmol` N)

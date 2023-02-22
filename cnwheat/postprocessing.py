@@ -53,7 +53,7 @@ AXES_POSTPROCESSING_VARIABLES = ['C_N_ratio', 'C_N_ratio_shoot', 'N_content', 'N
                                  'shoot_roots_mstruct_ratio', 'Total_Photosynthesis', 'Tillers_Photosynthesis', 'Tillers_Photosynthesis_An', 'NNI',
                                  'NS', 'NS_shoot', 'NS_stem', 'NS_laminae', 'NS_roots', 'mstruct_shoot', 'mstruct_laminae', 'mstruct_stem',
                                  'C_respired_shoot', 'C_respired_roots', 'Cont_WSC_DM', 'Cont_WSC_DM_shoot', 'Cont_WSC_DM_roots', 'Cont_WSC_DM_laminae', 'Cont_WSC_DM_stem',
-                                 'sum_C_g', 'sum_NSC_g']
+                                 'sum_C_g', 'sum_NSC_g', 'C_exudated']
 
 #: concatenation of :attr:`AXES_T_INDEXES`, :attr:`AXES_RUN_VARIABLES <cnwheat.simulation.Simulation.AXES_RUN_VARIABLES>` and :attr:`AXES_POSTPROCESSING_VARIABLES`
 AXES_RUN_POSTPROCESSING_VARIABLES = set(AXES_T_INDEXES + cnwheat_simulation.Simulation.AXES_RUN_VARIABLES + AXES_POSTPROCESSING_VARIABLES)
@@ -1157,11 +1157,11 @@ def postprocessing(plants_df=None, axes_df=None, metamers_df=None, hiddenzones_d
             NS = (1 - sum_mstruct / sum_dry_mass) * 100
 
             # C_respired_shoot
-            hz_df_MS['Respi_growth_tillers'] = hz_df_MS['Respi_growth'].fillna(0) * hz_df_MS['nb_replications'].fillna(1)
-            C_respired_shoot = pp_axes_df.sum_respi_shoot.fillna(0.) + hz_df_MS.groupby(AXES_T_INDEXES, as_index=False)['Respi_growth_tillers'].sum().Respi_growth_tillers
+            #hz_df_MS['Respi_growth_tillers'] = hz_df_MS['Respi_growth'].fillna(0) * hz_df_MS['nb_replications'].fillna(1)
+            #C_respired_shoot = pp_axes_df.sum_respi_shoot.fillna(0.) + hz_df_MS.groupby(AXES_T_INDEXES, as_index=False)['Respi_growth_tillers'].sum().Respi_growth_tillers
 
             # C_respired_roots
-            C_respired_roots = pp_axes_df.sum_respi_roots.fillna(0.) + organs_df[(organs_df['organ'] == 'roots')]['Respi_growth'].reset_index(drop=True)
+            #C_respired_roots = pp_axes_df.sum_respi_roots.fillna(0.) + organs_df[(organs_df['organ'] == 'roots')]['Respi_growth'].reset_index(drop=True)
 
             # Add to axes df
             pp_axes_df.sort_values(AXES_T_INDEXES, inplace=True)  # Make sure axes_df is sorted
@@ -1198,8 +1198,8 @@ def postprocessing(plants_df=None, axes_df=None, metamers_df=None, hiddenzones_d
             pp_axes_df.loc[:, 'mstruct_shoot'] = sum_mstruct_shoot.values
             pp_axes_df.loc[:, 'mstruct_laminae'] = sum_mstruct_laminae.values
             pp_axes_df.loc[:, 'mstruct_stem'] = sum_mstruct_stem.values
-            pp_axes_df.loc[:, 'C_respired_shoot'] = C_respired_shoot
-            pp_axes_df.loc[:, 'C_respired_roots'] = C_respired_roots
+            # pp_axes_df.loc[:, 'C_respired_shoot'] = C_respired_shoot
+            # pp_axes_df.loc[:, 'C_respired_roots'] = C_respired_roots
             pp_axes_df.loc[:, 'WSC_g'] = WSC_g_plant.values
             pp_axes_df.loc[:, 'Cont_WSC_DM'] = pp_axes_df['WSC_g'] / pp_axes_df['sum_dry_mass'] * 100
             pp_axes_df.loc[:, 'Cont_WSC_DM_shoot'] = sum_WSC_g_shoot.values / sum_dry_mass_shoot.values * 100

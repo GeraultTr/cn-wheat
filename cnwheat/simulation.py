@@ -143,7 +143,7 @@ class Simulation(object):
     #: :class:`model.Organ`, :class:`model.HiddenZone`, :class:`model.PhotosyntheticOrganElement`,
     #: and :class:`model.Soil`.
     MODEL_COMPARTMENTS_NAMES = {model.Plant: [],
-                                model.Axis: ['C_exudated', 'sum_respi_shoot', 'sum_respi_roots'],
+                                model.Axis: [],
                                 model.Phytomer: [],
                                 model.Organ: ['age_from_flowering', 'amino_acids', 'cytokinins',
                                               'nitrates', 'proteins', 'starch', 'structure', 'sucrose'],
@@ -344,7 +344,7 @@ class Simulation(object):
                                      model.PhotosyntheticOrganElement: 'cnwheat.derivatives.elements',
                                      model.Soil: 'cnwheat.derivatives.soils'}}
 
-    def __init__(self, respiration_model, delta_t=1, culm_density=None, interpolate_forcings=False, senescence_forcings_delta_t=None, photosynthesis_forcings_delta_t=None, isolated_roots=False):
+    def __init__(self, respiration_model, delta_t=1, culm_density=None, interpolate_forcings=False, senescence_forcings_delta_t=None, photosynthesis_forcings_delta_t=None, isolated_roots=False, cnwheat_roots=True):
 
         self.respiration_model = respiration_model  #: the model of respiration to use
 
@@ -377,6 +377,7 @@ class Simulation(object):
         self.interpolate_forcings = interpolate_forcings  #: a boolean flag which indicates if we want to interpolate or not the forcings (True: interpolate, False: do not interpolate)
 
         self.isolated_roots = isolated_roots
+        self.cnwheat_roots = cnwheat_roots
 
         # set the loggers for compartments and derivatives
         compartments_logger = logging.getLogger('cnwheat.compartments')
@@ -607,9 +608,13 @@ class Simulation(object):
             return index
 
         i = 0
+        i_root = 0
 
         for soil in soils.values():
-            i = _init_initial_conditions(soil, i)
+            if not self.isolated_roots:
+                i = _init_initial_conditions(soil, i)
+            else:
+                i_root = _init_initial_conditions_roots(soil, i_root)
 
         for plant in self.population.plants:
             i = _init_initial_conditions(plant, i)
@@ -619,8 +624,9 @@ class Simulation(object):
                     if organ is None:
                         continue
                     elif organ == axis.roots and self.isolated_roots:
-                        i = _init_initial_conditions_roots(organ, i)
-                    i = _init_initial_conditions(organ, i)
+                        i_root = _init_initial_conditions_roots(organ, i_root)
+                    else:
+                        i = _init_initial_conditions(organ, i)
                 for phytomer in axis.phytomers:
                     i = _init_initial_conditions(phytomer, i)
                     for organ in (phytomer.chaff, phytomer.peduncle, phytomer.lamina, phytomer.internode, phytomer.sheath, phytomer.hiddenzone):
@@ -657,6 +663,8 @@ class Simulation(object):
             self.progressbar.set_t_max(self.time_step)
 
         self._update_initial_conditions()
+        self._update_initial_conditions_roots()
+
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Run the solver with delta_t = %s", self.time_step)
@@ -666,22 +674,28 @@ class Simulation(object):
         if not self.isolated_roots:
             sol = solve_ivp(fun=self._calculate_all_derivatives, t_span=self.time_grid, y0=self.initial_conditions,
                             method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
-        else:
+
+            self.nfev_total += sol.nfev
+
+            # check the integration ; raise an exception if the integration failed
+            if not sol.success:
+                message = "Integration failed: {}".format(sol.message)
+                logger.exception(message)
+                raise SimulationRunError(message)
+        elif self.cnwheat_roots:
             sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid, y0=self.initial_conditions,
                             method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
             sol_root = solve_ivp(fun=self._calculate_root_derivatives, t_span=self.time_grid, y0=self.initial_conditions_roots,
                             method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
+        else:
+            sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid,
+                                  y0=self.initial_conditions,
+                                  method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
 
-        self.nfev_total += sol.nfev
+            # Call another root model to update Sucrose, Nitrate, Amino Acid and Cytokinin fluxes with shoot phloem
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Run of the solver DONE")
-
-        # check the integration ; raise an exception if the integration failed
-        if not sol.success:
-            message = "Integration failed: {}".format(sol.message)
-            logger.exception(message)
-            raise SimulationRunError(message)
 
         # Re-compute integrative variables
         self.population.calculate_aggregated_variables()
@@ -697,10 +711,15 @@ class Simulation(object):
         # Update the compartments values
         for model_object, compartments in self.initial_conditions_mapping.items():
             for compartment_name, compartment_index in compartments.items():
-                try:
-                    self.initial_conditions[compartment_index] = getattr(model_object, compartment_name)
-                except:
-                    print(1)
+                self.initial_conditions[compartment_index] = getattr(model_object, compartment_name)
+
+    def _update_initial_conditions_roots(self):
+        """Update the compartments values in :attr:`initial_conditions` from the compartments values of :attr:`population` and :attr:`soils`.
+        """
+        # Update the compartments values
+        for model_object, compartments in self.initial_conditions_mapping_roots.items():
+            for compartment_name, compartment_index in compartments.items():
+                self.initial_conditions_roots[compartment_index] = getattr(model_object, compartment_name)
 
     def _interpolate_forcings(self):
         """Create functions to interpolate the forcings of the model to any time inside the time grid (see `self.time_grid`).
@@ -1147,8 +1166,7 @@ class Simulation(object):
             self._log_compartments(t_abs, y_derivatives, Simulation.LOGGERS_NAMES['derivatives'])
 
         return y_derivatives
-    
-    
+
     def _calculate_shoot_derivatives(self, t, y):
         """Compute the derivative of `y` at `t`.
 
@@ -1216,35 +1234,33 @@ class Simulation(object):
 
         y_derivatives = np.zeros_like(y)
 
-        # TODO: TEMP !!!!
-        soil_contributors = []
-        soil = self.soils[(1, 'MS')]
-        soil.nitrates = y[self.initial_conditions_mapping[soil]['nitrates']]
-        soil.Conc_Nitrates_Soil = soil.calculate_Conc_Nitrates(soil.nitrates)
-
-        soil.T_effect_Vmax = soil.calculate_temperature_effect_on_Vmax(soil.Tsoil)
-        soil.T_effect_conductivity = soil.calculate_temperature_effect_on_conductivity(soil.Tsoil)
-
         for plant in self.population.plants:
 
             plant.T_effect_conductivity = plant.calculate_temperature_effect_on_conductivity(plant.Tair)
             plant.T_effect_Vmax = plant.calculate_temperature_effect_on_Vmax(plant.Tair)
 
             for axis in plant.axes:
-                sum_respi_shoot = 0.0
-                axis.sum_respi_shoot = y[self.initial_conditions_mapping[axis]['sum_respi_shoot']]
 
                 # Phloem
                 phloem_contributors = []
                 axis.phloem.sucrose = y[self.initial_conditions_mapping[axis.phloem]['sucrose']]
                 axis.phloem.amino_acids = y[self.initial_conditions_mapping[axis.phloem]['amino_acids']]
                 # Roots
-                axis.roots.nitrates = y[self.initial_conditions_mapping[axis.roots]['nitrates']]
-                axis.roots.amino_acids = y[self.initial_conditions_mapping[axis.roots]['amino_acids']]
-                axis.roots.sucrose = y[self.initial_conditions_mapping[axis.roots]['sucrose']]
-                axis.roots.cytokinins = y[self.initial_conditions_mapping[axis.roots]['cytokinins']]
                 phloem_contributors.append(axis.roots)
 
+                # compute total transpiration at t_inf
+                axis.Total_Transpiration = 0.0  # mmol s-1
+                total_green_area = 0.0  # m2
+                for phytomer in axis.phytomers:
+                    for organ in (
+                    phytomer.chaff, phytomer.peduncle, phytomer.lamina, phytomer.internode, phytomer.sheath):
+                        if organ is not None:
+                            for element in (organ.exposed_element, organ.enclosed_element):
+                                if element is not None and element.green_area > 0:
+                                    element.Transpiration = element.calculate_Total_Transpiration(element.Tr,
+                                                                                                  element.green_area)
+                                    axis.Total_Transpiration += (element.Transpiration * element.nb_replications)
+                                    total_green_area += (element.green_area * element.nb_replications)
 
                 # compute the derivative of each photosynthetic organ element compartment
                 for phytomer in axis.phytomers:
@@ -1316,7 +1332,6 @@ class Simulation(object):
                             element.R_residual = self.respiration_model.RespirationModel.R_residual(element.sucrose, element.mstruct * element.__class__.PARAMETERS.ALPHA,
                                                                                                                            element.Total_Organic_Nitrogen, element.Ts)
                             element.sum_respi = element.R_phloem_loading + element.R_Nnit_red + element.R_residual
-                            sum_respi_shoot += element.sum_respi * element.nb_replications
                             sucrose_derivative = element.calculate_sucrose_derivative(element.S_Sucrose, element.D_Starch, element.Loading_Sucrose, element.S_Fructan,
                                                                                       element.D_Fructan, element.sum_respi)
                             triosesP_derivative = element.calculate_triosesP_derivative(element.Photosynthesis, element.S_Sucrose, element.S_Starch, element.S_Amino_Acids)
@@ -1361,7 +1376,6 @@ class Simulation(object):
                                                                                                                              hiddenzone.mstruct * hiddenzone.__class__.PARAMETERS.ALPHA,
                                                                                                                              hiddenzone.Total_Organic_Nitrogen,
                                                                                                                              plant.Tair)
-                        sum_respi_shoot += hiddenzone.R_residual * hiddenzone.nb_replications
 
                         # compute the derivatives of the hidden zone
                         y_derivatives[self.initial_conditions_mapping[hiddenzone]['sucrose']] = hiddenzone.calculate_sucrose_derivative(hiddenzone.Unloading_Sucrose, hiddenzone.S_Fructan,
@@ -1395,7 +1409,6 @@ class Simulation(object):
                     axis.grains.R_grain_growth_struct, axis.grains.R_grain_growth_starch = self.respiration_model.RespirationModel.R_grain_growth(axis.grains.S_grain_structure,
                                                                                                                                                   axis.grains.S_grain_starch,
                                                                                                                                                   axis.grains.structural_dry_mass)
-                    sum_respi_shoot += axis.grains.R_grain_growth_struct + axis.grains.R_grain_growth_starch
                     structure_derivative = axis.grains.calculate_structure_derivative(axis.grains.S_grain_structure, axis.grains.R_grain_growth_struct)
                     starch_derivative = axis.grains.calculate_starch_derivative(axis.grains.S_grain_starch, axis.grains.structural_dry_mass, axis.grains.R_grain_growth_starch)
                     proteins_derivative = axis.grains.calculate_proteins_derivative(axis.grains.S_Proteins)
@@ -1415,8 +1428,6 @@ class Simulation(object):
                 y_derivatives[self.initial_conditions_mapping[axis.phloem]['sucrose']] = sucrose_phloem_derivative
                 y_derivatives[self.initial_conditions_mapping[axis.phloem]['amino_acids']] = amino_acids_phloem_derivative
 
-                # compute the derivative of each compartment of axis
-                y_derivatives[self.initial_conditions_mapping[axis]['sum_respi_shoot']] += sum_respi_shoot
 
         if self.show_progressbar:
             self.progressbar.update(t)
@@ -1426,7 +1437,6 @@ class Simulation(object):
             self._log_compartments(t_abs, y_derivatives, Simulation.LOGGERS_NAMES['derivatives'])
 
         return y_derivatives
-    
 
     def _calculate_root_derivatives(self, t, y):
         """Compute the derivative of `y` at `t`.
@@ -1498,7 +1508,7 @@ class Simulation(object):
         # TODO: TEMP !!!!
         soil_contributors = []
         soil = self.soils[(1, 'MS')]
-        soil.nitrates = y[self.initial_conditions_mapping[soil]['nitrates']]
+        soil.nitrates = y[self.initial_conditions_mapping_roots[soil]['nitrates']]
         soil.Conc_Nitrates_Soil = soil.calculate_Conc_Nitrates(soil.nitrates)
 
         soil.T_effect_Vmax = soil.calculate_temperature_effect_on_Vmax(soil.Tsoil)
@@ -1511,26 +1521,11 @@ class Simulation(object):
 
             for axis in plant.axes:
             
-                axis.C_exudated = y[self.initial_conditions_mapping[axis]['C_exudated']]
-                axis.sum_respi_roots = y[self.initial_conditions_mapping[axis]['sum_respi_roots']]
-
                 # Roots
-                axis.roots.nitrates = y[self.initial_conditions_mapping[axis.roots]['nitrates']]
-                axis.roots.amino_acids = y[self.initial_conditions_mapping[axis.roots]['amino_acids']]
-                axis.roots.sucrose = y[self.initial_conditions_mapping[axis.roots]['sucrose']]
-                axis.roots.cytokinins = y[self.initial_conditions_mapping[axis.roots]['cytokinins']]
-
-                # compute total transpiration at t_inf
-                axis.Total_Transpiration = 0.0  # mmol s-1
-                total_green_area = 0.0  # m2
-                for phytomer in axis.phytomers:
-                    for organ in (phytomer.chaff, phytomer.peduncle, phytomer.lamina, phytomer.internode, phytomer.sheath):
-                        if organ is not None:
-                            for element in (organ.exposed_element, organ.enclosed_element):
-                                if element is not None and element.green_area > 0:
-                                    element.Transpiration = element.calculate_Total_Transpiration(element.Tr, element.green_area)
-                                    axis.Total_Transpiration += (element.Transpiration * element.nb_replications)
-                                    total_green_area += (element.green_area * element.nb_replications)
+                axis.roots.nitrates = y[self.initial_conditions_mapping_roots[axis.roots]['nitrates']]
+                axis.roots.amino_acids = y[self.initial_conditions_mapping_roots[axis.roots]['amino_acids']]
+                axis.roots.sucrose = y[self.initial_conditions_mapping_roots[axis.roots]['sucrose']]
+                axis.roots.cytokinins = y[self.initial_conditions_mapping_roots[axis.roots]['cytokinins']]
 
                 # Compute the regulating factor of root exports by shoot transpiration
                 axis.roots.regul_transpiration = axis.roots.calculate_regul_transpiration(axis.Total_Transpiration)
@@ -1562,19 +1557,14 @@ class Simulation(object):
                 amino_acids_derivative = axis.roots.calculate_amino_acids_derivative(axis.roots.Unloading_Amino_Acids, axis.roots.S_Amino_Acids, axis.roots.Export_Amino_Acids, axis.roots.N_exudation)
                 cytokinins_derivative = axis.roots.calculate_cytokinins_derivative(axis.roots.S_cytokinins, axis.roots.Export_cytokinins)
 
-                y_derivatives[self.initial_conditions_mapping[axis.roots]['sucrose']] = sucrose_derivative
-                y_derivatives[self.initial_conditions_mapping[axis.roots]['nitrates']] = nitrates_derivative
-                y_derivatives[self.initial_conditions_mapping[axis.roots]['amino_acids']] = amino_acids_derivative
-                y_derivatives[self.initial_conditions_mapping[axis.roots]['cytokinins']] = cytokinins_derivative
-
-                # compute the derivative of each compartment of axis
-                C_exudated = axis.calculate_C_exudated(axis.roots.C_exudation, axis.roots.N_exudation, axis.roots.mstruct)
-                y_derivatives[self.initial_conditions_mapping[axis]['C_exudated']] += C_exudated
-                y_derivatives[self.initial_conditions_mapping[axis]['sum_respi_roots']] += axis.roots.sum_respi
+                y_derivatives[self.initial_conditions_mapping_roots[axis.roots]['sucrose']] = sucrose_derivative
+                y_derivatives[self.initial_conditions_mapping_roots[axis.roots]['nitrates']] = nitrates_derivative
+                y_derivatives[self.initial_conditions_mapping_roots[axis.roots]['amino_acids']] = amino_acids_derivative
+                y_derivatives[self.initial_conditions_mapping_roots[axis.roots]['cytokinins']] = cytokinins_derivative
 
         # compute the derivative of each compartment of soil
         soil.mineralisation = soil.calculate_mineralisation(soil.T_effect_Vmax)
-        y_derivatives[self.initial_conditions_mapping[soil]['nitrates']] = soil.calculate_nitrates_derivative(soil.mineralisation, soil_contributors, self.culm_density, soil.constant_Conc_Nitrates)
+        y_derivatives[self.initial_conditions_mapping_roots[soil]['nitrates']] = soil.calculate_nitrates_derivative(soil.mineralisation, soil_contributors, self.culm_density, soil.constant_Conc_Nitrates)
 
         if self.show_progressbar:
             self.progressbar.update(t)
