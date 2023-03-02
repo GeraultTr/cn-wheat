@@ -2,8 +2,10 @@
 
 from __future__ import division  # use "//" to do integer division
 import logging
+import time
 
 import numpy as np
+import pandas as pd
 from scipy.integrate import solve_ivp
 from scipy import interpolate
 
@@ -663,7 +665,8 @@ class Simulation(object):
             self.progressbar.set_t_max(self.time_step)
 
         self._update_initial_conditions()
-        self._update_initial_conditions_roots()
+        if self.isolated_roots:
+            self._update_initial_conditions_roots()
 
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -683,10 +686,37 @@ class Simulation(object):
                 logger.exception(message)
                 raise SimulationRunError(message)
         elif self.cnwheat_roots:
+            t1 = time.time()
             sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid, y0=self.initial_conditions,
                             method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
+            t2 = time.time()
             sol_root = solve_ivp(fun=self._calculate_root_derivatives, t_span=self.time_grid, y0=self.initial_conditions_roots,
                             method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
+            t3 = time.time()
+            # Solver resolution time
+            print("Shoot resolution took %s s (%s) and root %s s (%s)"%(round(t2-t1, 3), round((t2-t1)/(t3-t1), 3) , round(t3-t2, 3), round((t3-t2)/(t3-t1), 3) ))
+
+            # Solver outputs
+            print("Shoot solver :")
+            solver_times = pd.DataFrame(sol_shoot.t)
+            solver_times.columns = ['Time']
+            solver_y = pd.DataFrame(sol_shoot.y)
+            # solver_y = solver_y.transpose()
+            # solver_y.columns = self.initial_conditions_mapping_roots.keys()
+            solver_results = pd.concat([solver_times, solver_y], axis=1)
+            print(solver_results)
+            print("")
+
+            print("Root solver :")
+            solver_times = pd.DataFrame(sol_root.t)
+            solver_times.columns = ['Time']
+            solver_y = pd.DataFrame(sol_root.y)
+            #solver_y = solver_y.transpose()
+            #solver_y.columns = self.initial_conditions_mapping_roots.keys()
+            solver_results = pd.concat([solver_times, solver_y], axis=1)
+            print(solver_results)
+            print("")
+
         else:
             sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid,
                                   y0=self.initial_conditions,
@@ -921,9 +951,9 @@ class Simulation(object):
 
             for axis in plant.axes:
                 sum_respi_shoot = 0.0
-                axis.C_exudated = y[self.initial_conditions_mapping[axis]['C_exudated']]
-                axis.sum_respi_shoot = y[self.initial_conditions_mapping[axis]['sum_respi_shoot']]
-                axis.sum_respi_roots = y[self.initial_conditions_mapping[axis]['sum_respi_roots']]
+                #axis.C_exudated = y[self.initial_conditions_mapping[axis]['C_exudated']]
+                #axis.sum_respi_shoot = y[self.initial_conditions_mapping[axis]['sum_respi_shoot']]
+                #axis.sum_respi_roots = y[self.initial_conditions_mapping[axis]['sum_respi_roots']]
 
                 # Phloem
                 phloem_contributors = []
@@ -1149,10 +1179,10 @@ class Simulation(object):
                 y_derivatives[self.initial_conditions_mapping[axis.phloem]['amino_acids']] = amino_acids_phloem_derivative
 
                 # compute the derivative of each compartment of axis
-                C_exudated = axis.calculate_C_exudated(axis.roots.C_exudation, axis.roots.N_exudation, axis.roots.mstruct)
-                y_derivatives[self.initial_conditions_mapping[axis]['C_exudated']] += C_exudated
-                y_derivatives[self.initial_conditions_mapping[axis]['sum_respi_roots']] += axis.roots.sum_respi
-                y_derivatives[self.initial_conditions_mapping[axis]['sum_respi_shoot']] += sum_respi_shoot
+                # C_exudated = axis.calculate_C_exudated(axis.roots.C_exudation, axis.roots.N_exudation, axis.roots.mstruct)
+                # y_derivatives[self.initial_conditions_mapping[axis]['C_exudated']] += C_exudated
+                # y_derivatives[self.initial_conditions_mapping[axis]['sum_respi_roots']] += axis.roots.sum_respi
+                # y_derivatives[self.initial_conditions_mapping[axis]['sum_respi_shoot']] += sum_respi_shoot
 
         # compute the derivative of each compartment of soil
         soil.mineralisation = soil.calculate_mineralisation(soil.T_effect_Vmax)
@@ -1261,6 +1291,9 @@ class Simulation(object):
                                                                                                   element.green_area)
                                     axis.Total_Transpiration += (element.Transpiration * element.nb_replications)
                                     total_green_area += (element.green_area * element.nb_replications)
+
+                # Compute the regulating factor of root exports by shoot transpiration
+                axis.roots.regul_transpiration = axis.roots.calculate_regul_transpiration(axis.Total_Transpiration)
 
                 # compute the derivative of each photosynthetic organ element compartment
                 for phytomer in axis.phytomers:
@@ -1421,7 +1454,10 @@ class Simulation(object):
                 # flows
                 axis.roots.Unloading_Sucrose = axis.roots.calculate_Unloading_Sucrose(axis.roots.sucrose, axis.phloem.sucrose, axis.mstruct, plant.T_effect_conductivity)
                 axis.roots.Unloading_Amino_Acids = axis.roots.calculate_Unloading_Amino_Acids(axis.roots.Unloading_Sucrose, axis.phloem.sucrose, axis.phloem.amino_acids)
-            
+                axis.roots.Export_Nitrates = axis.roots.calculate_Export_Nitrates(axis.roots.nitrates, axis.roots.regul_transpiration)
+                axis.roots.Export_Amino_Acids = axis.roots.calculate_Export_Amino_Acids(axis.roots.amino_acids, axis.roots.regul_transpiration)
+                axis.roots.Export_cytokinins = axis.roots.calculate_Export_cytokinins(axis.roots.cytokinins, axis.roots.regul_transpiration)
+
                 # compute the derivative of each compartment of phloem
                 sucrose_phloem_derivative = axis.phloem.calculate_sucrose_derivative(phloem_contributors)
                 amino_acids_phloem_derivative = axis.phloem.calculate_amino_acids_derivative(phloem_contributors)
@@ -1527,18 +1563,11 @@ class Simulation(object):
                 axis.roots.sucrose = y[self.initial_conditions_mapping_roots[axis.roots]['sucrose']]
                 axis.roots.cytokinins = y[self.initial_conditions_mapping_roots[axis.roots]['cytokinins']]
 
-                # Compute the regulating factor of root exports by shoot transpiration
-                axis.roots.regul_transpiration = axis.roots.calculate_regul_transpiration(axis.Total_Transpiration)
-
                 # compute the flows from/to the roots to/from photosynthetic organs
                 axis.roots.Uptake_Nitrates, axis.roots.HATS_LATS = axis.roots.calculate_Uptake_Nitrates(soil.Conc_Nitrates_Soil, axis.roots.nitrates, axis.roots.sucrose,
                                                                                                         soil.T_effect_Vmax)
                 soil_contributors.append((axis.roots.Uptake_Nitrates, plant.index))  #: TODO TEMP!!!
                 axis.roots.R_Nnit_upt = self.respiration_model.RespirationModel.R_Nnit_upt(axis.roots.Uptake_Nitrates, axis.roots.sucrose)
-                axis.roots.Export_Nitrates = axis.roots.calculate_Export_Nitrates(axis.roots.nitrates, axis.roots.regul_transpiration)
-                axis.roots.Export_Amino_Acids = axis.roots.calculate_Export_Amino_Acids(axis.roots.amino_acids, axis.roots.regul_transpiration)
-                axis.roots.Export_cytokinins = axis.roots.calculate_Export_cytokinins(axis.roots.cytokinins, axis.roots.regul_transpiration)
-
                 
                 # compute the derivative of each compartment of roots
                 # flows
