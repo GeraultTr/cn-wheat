@@ -2,10 +2,8 @@
 
 from __future__ import division  # use "//" to do integer division
 import logging
-import time
 
 import numpy as np
-import pandas as pd
 from scipy.integrate import solve_ivp
 from scipy import interpolate
 
@@ -478,6 +476,9 @@ class Simulation(object):
         self.soils.clear()
         del self.initial_conditions[:]
         self.initial_conditions_mapping.clear()
+        if self.isolated_roots:
+            del self.initial_conditions_roots[:]
+            self.initial_conditions_mapping_roots.clear()
 
         # create new population and soils
         self.population.plants.extend(population.plants)
@@ -686,36 +687,36 @@ class Simulation(object):
                 logger.exception(message)
                 raise SimulationRunError(message)
         elif self.cnwheat_roots:
-            t1 = time.time()
+            #t1 = time.time()
             sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid, y0=self.initial_conditions,
-                            method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
-            t2 = time.time()
+                            method='BDF', t_eval=None, dense_output=False)
+            #t2 = time.time()
             sol_root = solve_ivp(fun=self._calculate_root_derivatives, t_span=self.time_grid, y0=self.initial_conditions_roots,
-                            method='BDF', t_eval=np.array([self.time_step]), dense_output=False)
-            t3 = time.time()
-            # Solver resolution time
-            print("Shoot resolution took %s s (%s) and root %s s (%s)"%(round(t2-t1, 3), round((t2-t1)/(t3-t1), 3) , round(t3-t2, 3), round((t3-t2)/(t3-t1), 3) ))
+                            method='BDF', t_eval=None, dense_output=False)
+            #t3 = time.time()
+            # # Solver resolution time
+            #print("Shoot resolution took %s s (%s) and root %s s (%s)"%(round(t2-t1, 3), round((t2-t1)/(t3-t1), 3) , round(t3-t2, 3), round((t3-t2)/(t3-t1), 3) ))
 
-            # Solver outputs
-            print("Shoot solver :")
-            solver_times = pd.DataFrame(sol_shoot.t)
-            solver_times.columns = ['Time']
-            solver_y = pd.DataFrame(sol_shoot.y)
+            # # Solver outputs
+            # print("Shoot solver :")
+            # solver_times = pd.DataFrame(sol_shoot.t)
+            # solver_times.columns = ['Time']
+            # solver_y = pd.DataFrame(sol_shoot.y)
             # solver_y = solver_y.transpose()
-            # solver_y.columns = self.initial_conditions_mapping_roots.keys()
-            solver_results = pd.concat([solver_times, solver_y], axis=1)
-            print(solver_results)
-            print("")
-
-            print("Root solver :")
-            solver_times = pd.DataFrame(sol_root.t)
-            solver_times.columns = ['Time']
-            solver_y = pd.DataFrame(sol_root.y)
-            #solver_y = solver_y.transpose()
-            #solver_y.columns = self.initial_conditions_mapping_roots.keys()
-            solver_results = pd.concat([solver_times, solver_y], axis=1)
-            print(solver_results)
-            print("")
+            # #solver_y.columns = self.initial_conditions_mapping.keys()
+            # solver_results = pd.concat([solver_times, solver_y], axis=1)
+            # print(solver_results)
+            # print("")
+            #
+            # print("Root solver :")
+            # solver_times = pd.DataFrame(sol_root.t)
+            # solver_times.columns = ['Time']
+            # solver_y = pd.DataFrame(sol_root.y)
+            # solver_y = solver_y.transpose()
+            # #solver_y.columns = self.initial_conditions_mapping_roots.keys()
+            # solver_results = pd.concat([solver_times, solver_y], axis=1)
+            # print(solver_results)
+            # print("")
 
         else:
             sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid,
