@@ -188,7 +188,7 @@ if RUN_SIMU:
     # Create the simulation
     simulation_ = cnwheat_simulation.Simulation(respiration_model=respiwheat_model, delta_t=time_step_seconds, culm_density=CULM_DENSITY,
                                                 interpolate_forcings=INTERPOLATE_FORCINGS, senescence_forcings_delta_t=senescence_forcings_delta_t,
-                                                photosynthesis_forcings_delta_t=photosynthesis_forcings_delta_t)
+                                                photosynthesis_forcings_delta_t=photosynthesis_forcings_delta_t, isolated_roots=True)
 
     # Initialize the simulation from the population of plants and the dictionary of soils created previously
     simulation_.initialize(population, soils)
