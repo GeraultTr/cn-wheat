@@ -362,6 +362,8 @@ class Simulation(object):
         if isolated_roots:
             self.initial_conditions_roots = []
             self.initial_conditions_mapping_roots = {}
+            if not cnwheat_roots:
+                self.first_initialization = True
 
         self.progressbar = tools.ProgressBar(title='Solver progress')  #: progress bar to show the progress of the solver
         self.show_progressbar = False  #: True: show the progress bar ; False: DO NOT show the progress bar
@@ -614,11 +616,13 @@ class Simulation(object):
         i = 0
         i_root = 0
 
-        for soil in soils.values():
-            if not self.isolated_roots:
-                i = _init_initial_conditions(soil, i)
-            else:
-                i_root = _init_initial_conditions_roots(soil, i_root)
+        # We initialize soil only if roots are present
+        if self.cnwheat_roots:
+            for soil in soils.values():
+                if not self.isolated_roots:
+                    i = _init_initial_conditions(soil, i)
+                else:
+                    i_root = _init_initial_conditions_roots(soil, i_root)
 
         for plant in self.population.plants:
             i = _init_initial_conditions(plant, i)
@@ -628,7 +632,14 @@ class Simulation(object):
                     if organ is None:
                         continue
                     elif organ == axis.roots and self.isolated_roots:
-                        i_root = _init_initial_conditions_roots(organ, i_root)
+                        if self.cnwheat_roots:
+                            i_root = _init_initial_conditions_roots(organ, i_root)
+                        # If roots are not present, an initialization at each time step is not necessary
+                        else:
+                            if self.first_initialization:
+                                i_root = _init_initial_conditions_roots(organ, i_root)
+                                self.first_initialization = False
+
                     else:
                         i = _init_initial_conditions(organ, i)
                 for phytomer in axis.phytomers:
