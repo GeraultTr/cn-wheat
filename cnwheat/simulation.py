@@ -607,7 +607,6 @@ class Simulation(object):
             self.initial_conditions_mapping_roots[root_object] = {}
             for compartment_name in compartments_names:
                 if hasattr(root_object, compartment_name):
-                    print(compartment_name)
                     self.initial_conditions_mapping_roots[root_object][compartment_name] = index
                     self.initial_conditions_roots.append(0)
                     index += 1
