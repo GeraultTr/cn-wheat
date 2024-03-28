@@ -605,6 +605,7 @@ class Simulation(object):
             self.initial_conditions_mapping_roots[root_object] = {}
             for compartment_name in compartments_names:
                 if hasattr(root_object, compartment_name):
+                    print(compartment_name)
                     self.initial_conditions_mapping_roots[root_object][compartment_name] = index
                     self.initial_conditions_roots.append(0)
                     index += 1
@@ -666,7 +667,7 @@ class Simulation(object):
             self.progressbar.set_t_max(self.time_step)
 
         self._update_initial_conditions()
-        if self.isolated_roots:
+        if self.isolated_roots and self.cnwheat_roots:
             self._update_initial_conditions_roots()
 
 
@@ -1455,9 +1456,11 @@ class Simulation(object):
                 # flows
                 axis.roots.Unloading_Sucrose = axis.roots.calculate_Unloading_Sucrose(axis.roots.sucrose, axis.phloem.sucrose, axis.mstruct, plant.T_effect_conductivity)
                 axis.roots.Unloading_Amino_Acids = axis.roots.calculate_Unloading_Amino_Acids(axis.roots.Unloading_Sucrose, axis.phloem.sucrose, axis.phloem.amino_acids)
-                axis.roots.Export_Nitrates = axis.roots.calculate_Export_Nitrates(axis.roots.nitrates, axis.roots.regul_transpiration)
-                axis.roots.Export_Amino_Acids = axis.roots.calculate_Export_Amino_Acids(axis.roots.amino_acids, axis.roots.regul_transpiration)
                 axis.roots.Export_cytokinins = axis.roots.calculate_Export_cytokinins(axis.roots.cytokinins, axis.roots.regul_transpiration)
+
+                if self.cnwheat_roots:
+                    axis.roots.Export_Nitrates = axis.roots.calculate_Export_Nitrates(axis.roots.nitrates, axis.roots.regul_transpiration)
+                    axis.roots.Export_Amino_Acids = axis.roots.calculate_Export_Amino_Acids(axis.roots.amino_acids, axis.roots.regul_transpiration)
 
                 # compute the derivative of each compartment of phloem
                 sucrose_phloem_derivative = axis.phloem.calculate_sucrose_derivative(phloem_contributors)
