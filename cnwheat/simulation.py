@@ -733,7 +733,7 @@ class Simulation(object):
             sol_shoot = solve_ivp(fun=self._calculate_shoot_derivatives, t_span=self.time_grid,
                                   y0=self.initial_conditions,
                                   method='BDF', t_eval=np.array([self.time_step]), dense_output=False,
-                                  jac_sparsity=self._jac_sparsity_shoot,
+                                #   jac_sparsity=self._jac_sparsity_shoot,
                                   )
 
             # Call another root model to update Sucrose, Nitrate, Amino Acid and Cytokinin fluxes with shoot phloem
@@ -1273,8 +1273,13 @@ class Simulation(object):
         y_isnan = np.isnan(y)
         if y_isnan.any():
             message = 'The solver did not manage to compute a compartment. See the logs. NaN found in y'
-            logger.exception(message)
-            raise SimulationRunError(message)
+            logger_output = logging.getLogger("Simulation_Logger")
+            logger_output.info(message)
+            logger_output.info(self.initial_conditions_mapping, np.flatnonzero(np.isnan(y)), y[np.isnan(y)], self.y_previous[np.flatnonzero(np.isnan(y))])
+            y[np.isnan(y)] = self.y_previous[np.flatnonzero(np.isnan(y))]
+            # raise SimulationRunError(message)
+        
+        self.y_previous = y
 
         y_derivatives = np.zeros_like(y)
 
@@ -1356,8 +1361,8 @@ class Simulation(object):
 
                             else:  #: Loading of sucrose and amino acids towards the phloem
                                 # phloem_contributors.append(element)
-                                element.Loading_Sucrose = element.calculate_Loading_Sucrose(element.sucrose, axis.phloem.sucrose, axis.mstruct, plant.T_effect_conductivity)
-                                element.Loading_Amino_Acids = element.calculate_Loading_Amino_Acids(element.amino_acids, axis.phloem.amino_acids, axis.mstruct, plant.T_effect_conductivity)
+                                element.Loading_Sucrose = element.calculate_Loading_Sucrose(element.sucrose, axis.phloem.sucrose, axis.mstruct - axis.roots.mstruct, plant.T_effect_conductivity)
+                                element.Loading_Amino_Acids = element.calculate_Loading_Amino_Acids(element.amino_acids, axis.phloem.amino_acids, axis.mstruct - axis.roots.mstruct, plant.T_effect_conductivity)
 
                             element.Regul_S_Fructan = element.calculate_Regul_S_Fructan(element.Loading_Sucrose)
                             element.S_Fructan = element.calculate_S_Fructan(element.sucrose, element.Regul_S_Fructan, plant.T_effect_Vmax)
@@ -1403,10 +1408,10 @@ class Simulation(object):
 
                     if phytomer.hiddenzone is not None:
                         # Unloading of sucrose from phloem
-                        hiddenzone.Unloading_Sucrose = hiddenzone.calculate_Unloading_Sucrose(hiddenzone.sucrose, axis.phloem.sucrose, axis.mstruct, plant.T_effect_conductivity)
+                        hiddenzone.Unloading_Sucrose = hiddenzone.calculate_Unloading_Sucrose(hiddenzone.sucrose, axis.phloem.sucrose, axis.mstruct - axis.roots.mstruct, plant.T_effect_conductivity)
 
                         # Unloading of AA from phloem
-                        hiddenzone.Unloading_Amino_Acids = hiddenzone.calculate_Unloading_Amino_Acids(hiddenzone.amino_acids, axis.phloem.amino_acids, axis.mstruct, plant.T_effect_conductivity)
+                        hiddenzone.Unloading_Amino_Acids = hiddenzone.calculate_Unloading_Amino_Acids(hiddenzone.amino_acids, axis.phloem.amino_acids, axis.mstruct - axis.roots.mstruct, plant.T_effect_conductivity)
 
                         # Fructan synthesis
                         Regul_Sfructanes = hiddenzone.calculate_Regul_S_Fructan(hiddenzone.Unloading_Sucrose)
