@@ -53,7 +53,7 @@ AXES_POSTPROCESSING_VARIABLES = ['C_N_ratio', 'C_N_ratio_shoot', 'N_content', 'N
                                  'shoot_roots_mstruct_ratio', 'Total_Photosynthesis', 'Tillers_Photosynthesis', 'Tillers_Photosynthesis_An', 'NNI',
                                  'NS', 'NS_shoot', 'NS_stem', 'NS_laminae', 'NS_roots', 'mstruct_shoot', 'mstruct_laminae', 'mstruct_stem',
                                  'C_respired_shoot', 'C_respired_roots', 'Cont_WSC_DM', 'Cont_WSC_DM_shoot', 'Cont_WSC_DM_roots', 'Cont_WSC_DM_laminae', 'Cont_WSC_DM_stem',
-                                 'sum_C_g', 'sum_NSC_g', 'C_exudated']
+                                 'sum_C_g', 'sum_C_g_shoot', 'sum_NSC_g', 'C_exudated']
 
 #: concatenation of :attr:`AXES_T_INDEXES`, :attr:`AXES_RUN_VARIABLES <cnwheat.simulation.Simulation.AXES_RUN_VARIABLES>` and :attr:`AXES_POSTPROCESSING_VARIABLES`
 AXES_RUN_POSTPROCESSING_VARIABLES = set(AXES_T_INDEXES + cnwheat_simulation.Simulation.AXES_RUN_VARIABLES + AXES_POSTPROCESSING_VARIABLES)
@@ -1183,6 +1183,7 @@ def postprocessing(plants_df=None, axes_df=None, metamers_df=None, hiddenzones_d
             pp_axes_df.loc[:, 'sum_dry_mass_stem'] = sum_dry_mass_stem.values
             pp_axes_df.loc[:, 'sum_dry_mass_roots'] = sum_dry_mass_roots.values
             pp_axes_df.loc[:, 'sum_C_g'] = sum_C_g.values
+            pp_axes_df.loc[:, 'sum_C_g_shoot'] = sum_C_g_shoot.values
             pp_axes_df.loc[:, 'sum_NSC_g'] = sum_NSC_g.values
             pp_axes_df.loc[:, 'dry_mass_phloem'] = sum_dry_mass_phloem.values
             pp_axes_df.loc[:, 'shoot_roots_ratio'] = pp_axes_df['sum_dry_mass_shoot'] / pp_axes_df['sum_dry_mass_roots']
