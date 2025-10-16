@@ -801,8 +801,8 @@ class Roots(Organ):
         self.cytokinins = cytokinins  #: AU cytokinins
 
         # fluxes from phloem
-        self.Unloading_Sucrose = None  #: current Unloading of sucrose from phloem to roots
-        self.Unloading_Amino_Acids = None  #: current Unloading of amino acids from phloem to roots
+        self.Unloading_Sucrose = 0  #: current Unloading of sucrose from phloem to roots
+        self.Unloading_Amino_Acids = 0  #: current Unloading of amino acids from phloem to roots
 
         # other fluxes
         self.Export_Nitrates = 0  #: Total export of nitrates from roots to shoot organs integrated over a delta t (�mol` N)
